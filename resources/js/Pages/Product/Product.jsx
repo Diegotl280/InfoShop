@@ -24,6 +24,7 @@ import { Barcode } from 'lucide-react';
 import BatchModal from "./Partials/BatchModal";
 import QuantityModal from "./Partials/QuantityModal";
 import CustomPagination from "@/Components/CustomPagination";
+import FilterModal from "@/Components/FilterModal";
 import { useState } from "react";
 import numeral from "numeral";
 import { useEffect } from "react";
@@ -241,6 +242,7 @@ export default function Product({ products, stores, contacts }) {
             status: urlParams.get("status") || 1,
             search_query: "",
             alert_quantity: "",
+            sortBy: urlParams.get("sortBy") || "default",
             per_page: 100,
             contact_id: "",
         };
@@ -361,52 +363,34 @@ export default function Product({ products, stores, contacts }) {
                     alignItems={"center"}
                     justifyContent={{ xs: "center", sm: "end" }}
                 >
-                    <Grid size={{ xs: 12, sm: 3, md: 2 }}>
-                        <TextField
-                            value={filters.store}
-                            label="Store"
-                            onChange={handleFilterChange}
-                            required
-                            name="store"
-                            select
-                            fullWidth
-                            margin="dense"
-                            size="small"
-                        >
-                            <MenuItem value={0}>All</MenuItem>
-                            {stores.map((store) => (
-                                <MenuItem key={store.id} value={store.id}>
-                                    {store.name}
-                                </MenuItem>
-                            ))}
-                        </TextField>
+                    <Grid size={{ xs: 12, sm: "auto", md: "auto" }} className="mr-2 w-full" >
+                        <FilterModal
+                            fields={[
+                                {
+                                    name: 'store',
+                                    label: 'Store',
+                                    type: 'select',
+                                    options: stores,
+                                    size: { xs: 12, sm: 6, md: 6 }
+                                },
+                                {
+                                    name: 'contact_id',
+                                    label: 'Supplier',
+                                    type: 'select2',
+                                    options: dataContacts,
+                                    size: { xs: 12, sm: 6, md: 6 },
+                                    getOptionLabel: (option) => option.name + ' | ' + option.balance,
+                                    getOptionValue: (option) => option.id
+                                }
+                            ]}
+                            filters={filters}
+                            handleFilterChange={handleFilterChange}
+                            title="Advanced Filters"
+                            buttonTitle="Advanced Filters"
+                        />
                     </Grid>
 
-                    <Grid size={{ xs: 12, sm: 4, md: 3 }}>
-                        <Select2
-                            fullWidth
-                            placeholder="Select a supplier..."
-                            styles={{
-                                control: (baseStyles, state) => ({
-                                    ...baseStyles,
-                                    height: "40px",
-                                }),
-                                menuPortal: base => ({ ...base, zIndex: 9999 })
-                            }}
-                            options={contacts} // Options to display in the dropdown
-                            onChange={(selectedOption) =>
-                                handleFilterChange(selectedOption)
-                            }
-                            isClearable // Allow the user to clear the selected option
-                            getOptionLabel={(option) =>
-                                option.name + " | " + option.balance
-                            }
-                            getOptionValue={(option) => option.id}
-                            menuPortalTarget={document.body}
-                        ></Select2>
-                    </Grid>
-
-                    <Grid size={{ xs: 6, sm: 2 }}>
+                    <Grid size={{ xs: 6, sm: 2, md: 2 }}>
                         <TextField
                             value={filters.status}
                             label="Status"
@@ -427,7 +411,7 @@ export default function Product({ products, stores, contacts }) {
                         </TextField>
                     </Grid>
 
-                    <Grid size={{ xs: 6, sm: 2, md: 2 }}>
+                    <Grid size={{ xs: 6, sm: 2, md: 1 }}>
                         <TextField
                             value={filters.alert_quantity}
                             label="Alert Qty"
@@ -442,6 +426,27 @@ export default function Product({ products, stores, contacts }) {
                                 },
                             }}
                         />
+                    </Grid>
+
+                    <Grid size={{ xs: 12, sm: 2, md: 2 }}>
+                        <TextField
+                            value={filters.sortBy}
+                            label="Sort By"
+                            size="small"
+                            onChange={handleFilterChange}
+                            fullWidth
+                            select
+                            name="sortBy"
+                            margin="dense"
+                        >
+                            <MenuItem value="default">Default</MenuItem>
+                            <MenuItem value="name_asc">Name (A to Z)</MenuItem>
+                            <MenuItem value="name_desc">Name (Z to A)</MenuItem>
+                            <MenuItem value="quantity_low">Quantity (Low to High)</MenuItem>
+                            <MenuItem value="quantity_high">Quantity (High to Low)</MenuItem>
+                            <MenuItem value="sleeping_most">Sleeping First</MenuItem>
+                            <MenuItem value="active_most">Active First</MenuItem>
+                        </TextField>
                     </Grid>
 
                     <Grid size={{ xs: 12, sm: 3, md: 3 }}>
@@ -471,7 +476,7 @@ export default function Product({ products, stores, contacts }) {
                         />
                     </Grid>
 
-                    <Grid size={{ xs: 9, sm: 3, md: 2 }}>
+                    <Grid size={{ xs: 12, sm: 2, md: 2 }}>
                         <Link href="/products/create">
                             <Button
                                 size="small"
@@ -493,7 +498,7 @@ export default function Product({ products, stores, contacts }) {
                         sx={{
                             display: "grid",
                             gridTemplateColumns: "1fr",
-                            height: "calc(100vh - 290px)",
+                            height: "calc(100vh - 200px)",
                         }}
                     >
                         <DataGrid

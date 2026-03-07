@@ -86,8 +86,35 @@ class ProductController extends Controller
             });
         }
 
+        // Apply sorting
+        if (isset($filters['sortBy']) && !empty($filters['sortBy'])) {
+            switch ($filters['sortBy']) {
+                case 'name_asc':
+                    $query->orderBy('products.name', 'asc');
+                    break;
+                case 'name_desc':
+                    $query->orderBy('products.name', 'desc');
+                    break;
+                case 'quantity_low':
+                    $query->orderBy('product_stocks.quantity', 'asc');
+                    break;
+                case 'quantity_high':
+                    $query->orderBy('product_stocks.quantity', 'desc');
+                    break;
+                case 'sleeping_most':
+                    $query->orderBy('product_stocks.updated_at', 'asc');
+                    break;
+                case 'active_most':
+                    $query->orderBy('product_stocks.updated_at', 'desc');
+                    break;
+                default:
+                    $query->orderBy('products.id', 'desc');
+            }
+        } else {
+            $query->orderBy('products.id', 'desc');
+        }
+
         $perPage = $filters['per_page'] ?? 100; // Default to 25 items per page
-        $query->orderBy('products.id', 'desc');
         $results = $query->paginate($perPage);
         $results->appends($filters);
 
@@ -104,7 +131,7 @@ class ProductController extends Controller
 
     public function index(Request $request)
     {
-        $filters = $request->only(['store', 'search_query', 'status', 'alert_quantity', 'per_page', 'contact_id']);
+        $filters = $request->only(['store', 'search_query', 'status', 'alert_quantity', 'per_page', 'contact_id', 'sortBy']);
 
         $products = $this->getProducts($filters);
 

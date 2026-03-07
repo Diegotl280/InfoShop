@@ -8,22 +8,19 @@ import { Button, Box, TextField, IconButton, Alert, AlertTitle, Tooltip } from '
 import AddIcon from '@mui/icons-material/Add';
 import PrintIcon from "@mui/icons-material/Print";
 import HourglassTopIcon from '@mui/icons-material/HourglassTop';
-import DeleteIcon from '@mui/icons-material/Delete';
 import numeral from 'numeral';
 import { DataGrid } from '@mui/x-data-grid';
 import FormDialog from './Partial/FormDialog';
 import CustomPagination from '@/Components/CustomPagination';
 import AddPaymentDialog from '@/Components/AddPaymentDialog';
 import PaymentsIcon from "@mui/icons-material/Payments";
+import { CircleXIcon } from 'lucide-react';
 import PendingActionsIcon from '@mui/icons-material/PendingActions';
 import Swal from 'sweetalert2';
 
 import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import MobileContactsList from './Partial/MobileContactsList';
-
-// import { syncPosProducts, getLocalPosProducts } from '@/localdb/pos_products';
-import { SalesProvider } from "@/Context/SalesContext";
 
 const columns = (handleRowClick, handleDelete) => [
     { field: 'id', headerName: 'ID', width: 80 },
@@ -109,7 +106,7 @@ const columns = (handleRowClick, handleDelete) => [
                             color="error"
                             onClick={() => handleDelete(params.row.id, params.row.name)}
                         >
-                            <DeleteIcon />
+                            <CircleXIcon />
                         </IconButton>
                     </Tooltip>
                 </>

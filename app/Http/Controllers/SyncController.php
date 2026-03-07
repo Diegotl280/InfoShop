@@ -9,8 +9,10 @@ use App\Models\Contact;
 use App\Models\Setting;
 use App\Models\Store;
 use App\Models\Charge;
+use App\Models\Collection;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 
 /**
@@ -28,6 +30,8 @@ use Carbon\Carbon;
  * - GET /api/sync?table=settings - Application settings
  * - GET /api/sync?table=stores - Store information
  * - GET /api/sync?table=charges - Taxes/fees/discounts
+ * - GET /api/sync?table=collections - Collections (categories, brands, tags)
+ * - GET /api/sync?table=collection_product - Collection-Product pivot table
  */
 class SyncController extends Controller
 {
@@ -44,6 +48,9 @@ class SyncController extends Controller
         'stores',     // Store information
         'charges',    // Taxes/fees/discounts
         'sales',      // Sales/invoices (read-only for display)
+        'collections', // Collections (categories, brands, tags)
+        'collection_product', // Collection-Product pivot table
+        'users',      // Users for approval workflow
     ];
 
     /**
@@ -107,6 +114,9 @@ class SyncController extends Controller
             'stores' => $this->getStores($request),
             'charges' => $this->getCharges($request),
             'sales' => $this->getSales($request),
+            'collections' => $this->getCollections($request),
+            'collection_product' => $this->getCollectionProduct($request),
+            'users' => $this->getUsers($request),
         };
     }
 
@@ -290,6 +300,15 @@ class SyncController extends Controller
         if ($lastSync) {
             $query->whereRaw('product_stocks.updated_at >= ?', [$lastSync->toDateTimeString()]);
         }
+
+        // Log the query for debugging
+        \Log::debug('[SYNC] getStocksOnly query', [
+            'sql' => $query->toSql(),
+            'bindings' => $query->getBindings(),
+            'store_id' => $storeId,
+            'last_sync_param' => $request->query('last_sync'),
+            'last_sync_parsed' => $lastSync ? $lastSync->toDateTimeString() : null,
+        ]);
 
         $stocks = $query->get()->map(function ($stock) {
             return [
@@ -503,6 +522,105 @@ class SyncController extends Controller
     }
 
     /**
+     * Get collections (categories, brands, tags)
+     * Returns collection information including hierarchical structure
+     *
+     * Query params:
+     * - last_sync (optional): Unix timestamp in milliseconds for incremental sync
+     * - collection_type (optional): Filter by type (category, brand, tag)
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    private function getCollections(Request $request)
+    {
+        $lastSync = $this->parseTimestamp($request->query('last_sync'));
+        $collectionType = $request->query('collection_type');
+
+        $query = Collection::query();
+
+        if ($lastSync) {
+            $query->whereRaw('updated_at >= ?', [$lastSync->toDateTimeString()]);
+        }
+
+        if ($collectionType) {
+            $query->where('collection_type', $collectionType);
+        }
+
+        $collections = $query->get()->map(function ($collection) {
+            return [
+                'id' => $collection->id,
+                'collection_type' => $collection->collection_type,
+                'name' => $collection->name,
+                'slug' => $collection->slug,
+                'description' => $collection->description,
+                'parent_id' => $collection->parent_id,
+                'updated_at' => $collection->updated_at instanceof Carbon
+                    ? $collection->updated_at->toIso8601String()
+                    : Carbon::parse($collection->updated_at)->toIso8601String(),
+            ];
+        });
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $collections,
+            'count' => $collections->count(),
+            'timestamp' => now()->toIso8601String(),
+        ]);
+    }
+
+    /**
+     * Get collection-product pivot table
+     * Returns many-to-many relationships between collections and products
+     *
+     * Query params:
+     * - last_sync (optional): Unix timestamp in milliseconds for incremental sync
+     * - collection_id (optional): Filter by specific collection
+     * - product_id (optional): Filter by specific product
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    private function getCollectionProduct(Request $request)
+    {
+        $lastSync = $this->parseTimestamp($request->query('last_sync'));
+        $collectionId = $request->query('collection_id');
+        $productId = $request->query('product_id');
+
+        $query = DB::table('collection_product');
+
+        if ($lastSync) {
+            $query->whereRaw('updated_at >= ?', [$lastSync->toDateTimeString()]);
+        }
+
+        if ($collectionId) {
+            $query->where('collection_id', $collectionId);
+        }
+
+        if ($productId) {
+            $query->where('product_id', $productId);
+        }
+
+        $collectionProducts = $query->get()->map(function ($pivot) {
+            return [
+                'id' => $pivot->id,
+                'collection_id' => $pivot->collection_id,
+                'product_id' => $pivot->product_id,
+                'updated_at' => $pivot->updated_at instanceof Carbon
+                    ? $pivot->updated_at->toIso8601String()
+                    : Carbon::parse($pivot->updated_at)->toIso8601String(),
+            ];
+        });
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $collectionProducts,
+            'count' => $collectionProducts->count(),
+            'timestamp' => now()->toIso8601String(),
+        ]);
+    }
+
+    /**
      * Get sales (invoices/transactions) - read-only for display
      * Returns sales with items and payment transactions
      *
@@ -647,6 +765,55 @@ class SyncController extends Controller
     }
 
     /**
+     * Get users for approval workflow
+     * Returns user information for account approval via InstantDB
+     *
+     * Note:
+     * - User ID: returned as 'user_id' (required for approval)
+     * - Store ID: returned as 'store_id' (required for approval)
+     * - User Role: returned as 'user_role' field for $users in InstantDB
+     *
+     * Query params:
+     * - email (optional): Filter by specific user email
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    private function getUsers(Request $request)
+    {
+        $email = $request->query('email');
+
+        $query = \App\Models\User::query();
+
+        // Filter by email if provided
+        if ($email) {
+            $query->where('email', $email);
+        }
+
+        $users = $query->get()->map(function ($user) {
+            return [
+                'user_id' => $user->id,      // Explicit user_id from database
+                'name' => $user->name,
+                'email' => $user->email,
+                'user_name' => $user->user_name,
+                'store_id' => $user->store_id ?? null,  // Required for approval
+                'user_role' => $user->user_role,  // User role
+                'is_active' => (bool) ($user->is_active ?? true),
+                'updated_at' => $user->updated_at instanceof Carbon
+                    ? $user->updated_at->toIso8601String()
+                    : Carbon::parse($user->updated_at)->toIso8601String(),
+            ];
+        });
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $users,
+            'count' => $users->count(),
+            'timestamp' => now()->toIso8601String(),
+        ]);
+    }
+
+    /**
      * Push sales from mobile POS to backend
      * Creates sales one by one using POSController::checkout()
      *
@@ -714,9 +881,19 @@ class SyncController extends Controller
                 }
 
             } catch (\Exception $e) {
+                \Log::error('SyncController pushSales error', [
+                    'sync_id' => $saleData['sync_id'] ?? null,
+                    'error' => $e->getMessage(),
+                    'exception' => get_class($e),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
+                    'trace' => $e->getTraceAsString(),
+                    'saleData' => $saleData, // Log the actual data for debugging
+                ]);
+
                 $errors[] = [
                     'sync_id' => $saleData['sync_id'] ?? null,
-                    'error' => $e->getMessage()
+                    'error' => $e->getMessage() ?: 'Unknown error: ' . get_class($e)
                 ];
             }
         }

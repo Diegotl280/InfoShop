@@ -697,6 +697,7 @@ class POSController extends Controller
             $receiptData = ReceiptDataService::getReceiptData($sale->id);
 
             return response()->json([
+                'status' => 'success',
                 'message' => 'Sale recorded successfully!',
                 'sale_id' => $sale->id,
                 'receipt' => $receiptData
